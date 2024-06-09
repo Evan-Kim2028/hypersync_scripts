@@ -11,17 +11,18 @@ async def historical_blocks_txs_sync():
     Use hypersync to query blocks and transactions and write to a LanceDB table. Assumes existence of a previous LanceDB table to
     query for the latest block number to resume querying.
     """
-    # hypersync client
+    # hypersync client, load with specific url
     client = hypersync.HypersyncClient(
-        hypersync.ClientConfig(url='http://1.backup.hypersync.xyz')
+        hypersync.ClientConfig(
+            url='http://1.backup.hypersync.xyz'
+        )
     )
 
-    # set to_block and from_block to query the desired block range.
-    to_block: int = 20050000
-    # fetch the latest block number from the blocks table. Alternatively can forgo the database query and set the to_block manually
+    # set the block range
     from_block: int = 20000000
+    to_block: int = 20005000
 
-    # # add +/-1 to the block range because the query is exclusive to the block number
+    # # add +/-1 to the block range because the query is not inclusive to the block number
     query = hypersync.Query(
         from_block=from_block-1,
         to_block=to_block+1,
@@ -35,6 +36,7 @@ async def historical_blocks_txs_sync():
     # Setting this number lower reduces client sync console error messages.
     query.max_num_transactions = 1_000  # for troubleshooting
 
+    # configuration settings to predetermine type output here
     config = hypersync.StreamConfig(
         hex_output=hypersync.HexOutput.PREFIXED,
         column_mapping=ColumnMapping(
@@ -65,16 +67,17 @@ async def historical_blocks_txs_sync():
 
     return await client.collect_parquet('data', query, config)
 
+# time the query
 start_time = time.time()
 data = asyncio.run(historical_blocks_txs_sync())
 end_time = time.time()
-
 print(f"Time taken: {end_time - start_time}")
 
 
-# Convert ArrowResponse to an Arrow Table
+# Merge separate datasets into a single dataset
 txs_df = pl.scan_parquet('data/transactions.parquet')
-blocks_df = pl.scan_parquet('data/blocks.parquet')
+blocks_df = pl.scan_parquet(
+    'data/blocks.parquet').rename({'number': 'block_number'})
 
 
 txs_blocks_joined = txs_df.join(
@@ -116,10 +119,7 @@ txs_blocks_joined_shortened = txs_blocks_joined.select(
 print(txs_blocks_joined.columns)
 print(txs_blocks_joined_shortened.head(15))
 
+# There used to be a problem with null columns in the `base_fee_per_gas` before June 2024. Confirm that problem is gone
 print('counting nulls')
 print(txs_blocks_joined_shortened.select('block_number', 'base_fee_per_gas').unique().group_by(
     'base_fee_per_gas').agg(pl.len().alias('count')).sort(by='count', descending=True))
-# print(txs_blocks_joined_shortened.select('block_number', 'base_fee_per_gas').unique().with_columns(
-#     pl.col('base_fee_per_gas').is_null().len()).shape)
-# print(txs_blocks_joined_shortened.select('block_number', 'base_fee_per_gas').unique().with_columns(
-#     pl.col('base_fee_per_gas').is_not_null().len()).shape)
