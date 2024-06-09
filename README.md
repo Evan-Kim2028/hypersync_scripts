@@ -1,3 +1,3 @@
 # hypersync-scripts
 
-Describe your project here.
+Collection of standalone scripts to use for working with Hypersync
