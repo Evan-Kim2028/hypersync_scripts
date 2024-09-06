@@ -6,7 +6,7 @@ authors = [
     { name = "Evan K", email = "ekcopersonal@gmail.com" }
 ]
 dependencies = [
-    "hypersync>=0.7.2",
+    "hypersync>=0.8.3",
     "polars>=0.20.31",
     "ipykernel>=6.29.4",
 ]
